@@ -1,0 +1,514 @@
+<!-- 
+  Word Network — WhatWords
+  https://youtube.com/WhatWordsEnglish)
+  © 2026 WhatWordsEnglish — MIT License
+  Free to use, share, and modify with attribution
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Word Network — What Words</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden; /* no scrollbar — navigation is mouse/drag only */
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 15px;
+            background-color: #f0f2f5;
+            color: #333;
+            height: 100vh;
+            box-sizing: border-box; /* padding included in height — prevents overflow */
+            display: flex;
+            flex-direction: column;
+        }
+        /* compact-header removed — logo moved into graph canvas corner */
+        /* logo-placeholder removed — replaced with img tag */
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            width: 100%;
+            height: 100%;
+            max-width: none;
+        }
+        .main-content {
+            display: flex;
+            gap: 15px;
+            height: 100%;
+            min-height: 0;
+        }
+        .control-panel {
+            width: 280px;
+            padding: 12px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            overflow-y: hidden;
+            flex-shrink: 0;
+        }
+        .graph-container {
+            flex: 1;
+            position: relative;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            overflow: hidden;
+            min-width: 0;
+        }
+        #graphCanvas {
+            width: 100%;
+            height: 100%;
+        }
+        #sliderPanel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            z-index: 10;
+            width: 160px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .slider-group {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .slider-group label {
+            font-weight: 500;
+            color: #444;
+            font-size: 11px;
+            margin-bottom: 1px;
+        }
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 3px;
+            background: #d7d7d7;
+            border-radius: 2px;
+            margin: 4px 0;
+            padding: 0;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #1877f2;
+            cursor: pointer;
+            border: none;
+        }
+        #currentSeed {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1877f2;
+            text-align: center;
+            padding: 8px;
+            background: #f0f2f5;
+            border-radius: 6px;
+            margin: 8px 0;
+            min-height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #status {
+            padding: 10px;
+            background: #e9f5ff;
+            border-radius: 6px;
+            border-left: 4px solid #1877f2;
+            font-size: 13px;
+            margin-top: auto;
+        }
+        #confirmationDialog {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+            display: none;
+            z-index: 100;
+            width: 280px;
+            text-align: center;
+        }
+        button {
+            background-color: #1877f2;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 13px;
+        }
+        button:hover { background-color: #166fe5; }
+        .panel-section {
+            padding: 12px;
+            background: #f7f9fa;
+            border-radius: 6px;
+        }
+        .panel-title {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #1877f2;
+            font-size: 14px;
+        }
+        /* footer removed */
+    </style>
+</head>
+<body>
+    <div class="container">
+        
+        <div class="main-content">
+            <div class="control-panel">
+                <div class="panel-section">
+                    <div class="panel-title">File Management</div>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <input type="file" id="load-file" accept=".json" style="display: none;">
+                        <button id="load-data" onclick="document.getElementById('load-file').click()">📂 Load</button>
+                        <button id="save-data" style="background-color: #34a853;">💾 Save</button>
+                    </div>
+                </div>                
+                <div class="panel-section">
+                    <div class="panel-title">Add Connections</div>
+                    <form id="wordForm">
+                        <label style="font-size: 12px;">Seed word:</label>
+                        <input id="seed" required placeholder="Enter a seed word" style="width:100%; padding:8px; margin-bottom:8px; border-radius:6px; border:1px solid #ddd;">
+                        <div id="currentSeed">-</div>
+                        <label style="font-size: 12px;">Connections (comma-separated):</label>
+                        <input id="connections" placeholder="Enter related words" style="width:100%; padding:8px; margin-bottom:8px; border-radius:6px; border:1px solid #ddd;">
+                        <button type="submit" style="width:100%; justify-content: center;">➕ Add Connections</button>
+                    </form>
+                </div>
+
+                <div class="panel-section">
+                    <div class="panel-title">Bulk Seed Creation</div>
+                    <textarea id="seedList" placeholder="Enter one word per line" style="width:100%; height:80px; padding:8px; margin-bottom:8px; border-radius:6px; border:1px solid #ddd;"></textarea>
+                    <button id="convertSeeds" style="width:100%; justify-content: center;">🔀 Convert to Seeds</button>
+                </div>
+
+                <div id="status">Ready to build your semantic network!</div>
+            </div>
+
+            <div class="graph-container">
+                <!-- LOGO OVERLAY: sits in bottom-left corner of graph canvas -->
+                <div style="position:absolute; bottom:10px; left:10px; z-index:10; display:flex; align-items:center; gap:6px; opacity:1.0; pointer-events:none;">
+                    <img src="whatwords_logo.png" alt="What Words" style="height:80px; width:auto;">
+                    <span style="font-family:sans-serif; font-size:48px; color:#888; font-weight:600;">Word Network</span>
+                </div>
+                <svg id="graphCanvas"></svg>
+
+                <div id="sliderPanel">
+                    <div class="slider-group">
+                        <label>Node Distance</label>
+                        <input type="range" id="sliderDistance" min="10" max="200" value="50">
+                    </div>
+                    <div class="slider-group">
+                        <label>Cluster Spread</label>
+                        <input type="range" id="sliderCharge" min="0" max="300" value="50">
+                    </div>
+                    <div class="slider-group">
+                        <label>Collision Radius</label>
+                        <input type="range" id="sliderCollision" min="0" max="50" value="5">
+                    </div>
+                </div>
+
+                <div id="confirmationDialog">
+                    <p id="confirmationMessage"></p>
+                    <div style="display: flex; gap: 8px; justify-content: center;">
+                        <button id="confirmDelete" style="background-color: #ff4d4d;">🗑️ Delete</button>
+                        <button id="cancelDelete" style="background-color: #e4e6eb; color: #333;">✖️ Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+
+    </div>
+
+    <script>
+        let rawData = [];
+        let networkData = [];
+        let forceDistance = 50;
+        let forceCharge = -50;
+        let forceCollision = 5;
+        let simulation, linkForce, collideForce;
+        let linkCounts = new Map();
+        let itemToDelete = null;
+        let deleteType = null;
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeEventListeners();
+            drawGraph(networkData);
+        });
+        
+        function initializeEventListeners() {
+            document.getElementById("wordForm").addEventListener("submit", handleFormSubmit);
+            document.getElementById("convertSeeds").addEventListener("click", handleBulkSeeds);
+            document.getElementById("seed").addEventListener("input", e => document.getElementById("currentSeed").textContent = e.target.value || "-");
+            
+            document.getElementById("sliderDistance").addEventListener("input", e => {
+                forceDistance = +e.target.value;
+                if (linkForce) linkForce.distance(forceDistance);
+                if (simulation) simulation.alpha(0.05).restart();
+            });
+            
+            document.getElementById("sliderCharge").addEventListener("input", e => {
+                forceCharge = -1 * +e.target.value;
+                if (simulation) { 
+                    simulation.force("charge", d3.forceManyBody().strength(forceCharge)); 
+                    simulation.alpha(0.05).restart(); 
+                }
+            });
+            
+            document.getElementById("sliderCollision").addEventListener("input", e => {
+                forceCollision = +e.target.value;
+                if (collideForce) collideForce.radius(d => (linkCounts.get(d.id) || 1) + forceCollision);
+                if (simulation) simulation.alpha(0.05).restart();
+            });
+            
+            document.getElementById("confirmDelete").addEventListener("click", handleConfirmDelete);
+            document.getElementById("cancelDelete").addEventListener("click", () => {
+                document.getElementById("confirmationDialog").style.display = 'none';
+            });
+            
+            document.getElementById("save-data").addEventListener("click", saveData);
+            document.getElementById("load-file").addEventListener("change", handleFileUpload);
+            window.addEventListener("resize", () => { if (simulation) drawGraph(networkData, true); });
+        }
+        
+        function normalizeData(data) {
+            const merged = new Map();
+            data.forEach(entry => {
+                const seed = (entry.seed || '').trim().toLowerCase();
+                const conns = (entry.connections || []).map(c => (c || '').trim().toLowerCase()).filter(c => c && c !== seed);
+                if (!merged.has(seed)) merged.set(seed, new Set());
+                conns.forEach(conn => {
+                    merged.get(seed).add(conn);
+                    if (!merged.has(conn)) merged.set(conn, new Set());
+                    merged.get(conn).add(seed);
+                });
+            });
+            return Array.from(merged.entries()).map(([seed, set]) => ({ seed, connections: [...set] }));
+        }
+
+        function drawGraph(data, preservePositions = false) {
+            const nodesMap = new Map();
+            linkCounts = new Map();
+            const links = [];
+            const addedPairs = new Set();
+            
+            data.forEach(entry => {
+                const seed = entry.seed;
+                if (!nodesMap.has(seed)) {
+                    const existingNode = simulation ? simulation.nodes().find(n => n.id === seed) : null;
+                    // CHANGE 1: new nodes spawn at viewport center instead of random position
+                    const cx = document.querySelector('.graph-container').clientWidth / 2;
+                    const cy = document.querySelector('.graph-container').clientHeight / 2;
+                    nodesMap.set(seed, { id: seed, x: preservePositions && existingNode ? existingNode.x : cx, y: preservePositions && existingNode ? existingNode.y : cy });
+                }
+                entry.connections.forEach(conn => {
+                    if (!nodesMap.has(conn)) {
+                        const existingNode = simulation ? simulation.nodes().find(n => n.id === conn) : null;
+                        // CHANGE 1 (continued): connection nodes also spawn at center
+                        const cx = document.querySelector('.graph-container').clientWidth / 2;
+                        const cy = document.querySelector('.graph-container').clientHeight / 2;
+                        nodesMap.set(conn, { id: conn, x: preservePositions && existingNode ? existingNode.x : cx, y: preservePositions && existingNode ? existingNode.y : cy });
+                    }
+                    const key = [seed, conn].sort().join("⇄");
+                    if (!addedPairs.has(key)) {
+                        addedPairs.add(key);
+                        links.push({ source: seed, target: conn });
+                        linkCounts.set(seed, (linkCounts.get(seed) || 0) + 1);
+                        linkCounts.set(conn, (linkCounts.get(conn) || 0) + 1);
+                    }
+                });
+            });
+            
+            const nodes = Array.from(nodesMap.values());
+            const svg = d3.select("#graphCanvas");
+            
+            let g = svg.select("g");
+            if (g.empty()) {
+                const container = d3.select(".graph-container");
+                svg.attr("width", container.node().clientWidth).attr("height", container.node().clientHeight);
+                g = svg.append("g");
+                g.append("g").attr("class", "links-layer");
+                g.append("g").attr("class", "nodes-layer");
+                g.append("g").attr("class", "labels-layer");
+                const zoom = d3.zoom().scaleExtent([0.2, 3]).on("zoom", e => g.attr("transform", e.transform));
+                svg.call(zoom).on("dblclick.zoom", null);
+            }
+            
+            linkForce = d3.forceLink(links).id(d => d.id).distance(forceDistance).strength(d => {
+                const a = linkCounts.get(d.source.id || d.source) || 0;
+                const b = linkCounts.get(d.target.id || d.target) || 0;
+                return (a <= 1 || b <= 1) ? 1 : 0.1;
+            });
+            collideForce = d3.forceCollide().radius(d => (linkCounts.get(d.id) || 1) + forceCollision);
+            
+            const container = d3.select(".graph-container");
+            if (!simulation) {
+                simulation = d3.forceSimulation(nodes)
+                    .force("link", linkForce)
+                    .force("charge", d3.forceManyBody().strength(forceCharge))
+                    .force("collide", collideForce)
+                    .force("center", d3.forceCenter(container.node().clientWidth / 2, container.node().clientHeight / 2))
+                    .on("tick", ticked);
+            } else {
+                simulation.nodes(nodes);
+                simulation.force("link", linkForce);
+                simulation.force("charge", d3.forceManyBody().strength(forceCharge));
+                simulation.force("collide", collideForce);
+                simulation.alpha(0.1).restart();
+            }
+            updateGraphElements(nodes, links);
+        }
+        
+        function updateGraphElements(nodes, links) {
+            const g = d3.select("#graphCanvas").select("g");
+            const maxConn = Math.max(...Array.from(linkCounts.values()), 1);
+            const colorScale = d3.scaleSequential(t => d3.interpolateRgbBasis(["#f6ff00", "#ffa400", "#ff650f", "#ff002e"])(t)).domain([0, maxConn]);
+
+            // Edges
+            const link = g.select(".links-layer").selectAll("line").data(links, d => `${d.source.id || d.source}⇄${d.target.id || d.target}`);
+            link.exit().remove();
+            link.enter().append("line").attr("stroke", "#aaa").attr("stroke-width", 3)
+                .on("contextmenu", (ev, d) => { ev.preventDefault(); showConfirmationDialog('edge', d); });
+
+            // Nodes (circles)
+            const node = g.select(".nodes-layer").selectAll("circle").data(nodes, d => d.id);
+            node.exit().remove();
+            const nodeEnter = node.enter().append("circle")
+                .call(d3.drag().on("start", dragStarted).on("drag", dragged).on("end", dragEnded))
+                .on("contextmenu", (ev, d) => { ev.preventDefault(); showConfirmationDialog('node', d); })
+                .on("dblclick", (ev, d) => { document.getElementById("seed").value = d.id; document.getElementById("currentSeed").textContent = d.id; });
+            
+            // FIX: Apply sizing and color to BOTH new and existing nodes
+            nodeEnter.merge(node)
+                .attr("r", d => 4 + (linkCounts.get(d.id) || 1))
+                .attr("fill", d => colorScale(linkCounts.get(d.id) || 0));
+
+            // Labels
+            const label = g.select(".labels-layer").selectAll("text").data(nodes, d => d.id);
+            label.exit().remove();
+            label.enter().append("text").merge(label)
+                .text(d => d.id)
+                .attr("font-size", d => 14 + Math.sqrt(linkCounts.get(d.id) || 1) * 2)
+                .attr("text-anchor", "middle")
+                .attr("alignment-baseline", "central")
+                .style("pointer-events", "none");
+        }
+        
+        function ticked() {
+            const g = d3.select("#graphCanvas").select("g");
+            g.select(".links-layer").selectAll("line").attr("x1", d => d.source.x).attr("y1", d => d.source.y).attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+            g.select(".nodes-layer").selectAll("circle").attr("cx", d => d.x).attr("cy", d => d.y);
+            g.select(".labels-layer").selectAll("text").attr("x", d => d.x).attr("y", d => d.y);
+        }
+        
+        function dragStarted(event) { if (!event.active) simulation.alphaTarget(0.1).restart(); event.subject.fx = event.subject.x; event.subject.fy = event.subject.y; }
+        function dragged(event) { event.subject.fx = event.x; event.subject.fy = event.y; }
+        function dragEnded(event) { if (!event.active) simulation.alphaTarget(0); event.subject.fx = null; event.subject.fy = null; }
+        
+        function showConfirmationDialog(type, data) {
+            const dialog = document.getElementById("confirmationDialog");
+            const message = document.getElementById("confirmationMessage");
+            if (type === 'node') { message.textContent = `Delete node: ${data.id}?`; itemToDelete = data.id; deleteType = 'node'; }
+            else { message.textContent = `Delete edge between ${data.source.id} and ${data.target.id}?`; itemToDelete = data; deleteType = 'edge'; }
+            dialog.style.display = 'block';
+        }
+        
+        function handleConfirmDelete() {
+            if (deleteType === 'node') {
+                rawData = rawData.filter(e => e.seed !== itemToDelete);
+                rawData.forEach(e => e.connections = e.connections.filter(c => c !== itemToDelete));
+            } else {
+                rawData = rawData.map(e => {
+                    if (e.seed === itemToDelete.source.id) return { ...e, connections: e.connections.filter(c => c !== itemToDelete.target.id) };
+                    if (e.seed === itemToDelete.target.id) return { ...e, connections: e.connections.filter(c => c !== itemToDelete.source.id) };
+                    return e;
+                });
+            }
+            networkData = normalizeData(rawData);
+            drawGraph(networkData, true);
+            document.getElementById("confirmationDialog").style.display = 'none';
+        }
+        
+        function handleFormSubmit(e) {
+            e.preventDefault();
+            const seed = document.getElementById("seed").value.trim().toLowerCase();
+            const connections = [...new Set(document.getElementById("connections").value.split(",").map(s => s.trim().toLowerCase()).filter(c => c && c !== seed))];
+            if (!seed) return;
+            let entry = rawData.find(e => e.seed === seed);
+            if (!entry) { entry = { seed, connections: [] }; rawData.push(entry); }
+            connections.forEach(c => {
+                if (!entry.connections.includes(c)) entry.connections.push(c);
+                let ce = rawData.find(e => e.seed === c);
+                if (!ce) { ce = { seed: c, connections: [] }; rawData.push(ce); }
+                if (!ce.connections.includes(seed)) ce.connections.push(seed);
+            });
+            networkData = normalizeData(rawData);
+            drawGraph(networkData, true);
+            e.target.reset();
+            document.getElementById("currentSeed").textContent = "-";
+        }
+        
+        function handleBulkSeeds() {
+            const lines = document.getElementById("seedList").value.split(/\r?\n/).map(s => s.trim().toLowerCase()).filter(Boolean);
+            lines.forEach(seed => { if (!rawData.find(e => e.seed === seed)) rawData.push({ seed, connections: [] }); });
+            networkData = normalizeData(rawData);
+            drawGraph(networkData, true);
+            document.getElementById("seedList").value = "";
+        }
+        
+        function saveData() {
+            const studentId = prompt("Enter a name for the file:", "My Network");
+            if (!studentId) return;
+            const blob = new Blob([JSON.stringify(rawData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${studentId.trim()}.json`;
+            a.click();
+        }
+        
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = e => {
+                try {
+                    rawData = JSON.parse(e.target.result);
+                    networkData = normalizeData(rawData);
+                    drawGraph(networkData);
+                } catch (err) { alert("Error loading JSON"); }
+            };
+            reader.readAsText(file);
+        }
+    </script>
+</body>
+</html>
